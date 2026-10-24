@@ -160,7 +160,7 @@ Core API:
 6. TEST SUITE & VERIFICATION RESULTS
 --------------------------------------------------------------------------------
 Automated test suite located in `tests/test_compliance_vault.py`:
-  • 26 test cases testing:
+  • 28 test cases testing:
       1. Audit log appending and hash generation
       2. Cryptographic hash-chain integrity verification
       3. Tamper detection (mutating past entries breaks verification)
@@ -169,10 +169,10 @@ Automated test suite located in `tests/test_compliance_vault.py`:
       6. Compliance Officer Override logic and state transitions
       7. Multi-override chaining and historical immutability
       8. PDF generation across all risk states (GREEN, YELLOW, RED)
-      9. FastAPI health and API endpoints
+      9. FastAPI health check, login rendering, dashboard, and document detail HTML
 
 Test Results:
-  ======================== 26 passed in 1.06s ========================
+  ======================== 28 passed in 1.03s ========================
 
 --------------------------------------------------------------------------------
 7. HOW TO RUN THE PROJECT
