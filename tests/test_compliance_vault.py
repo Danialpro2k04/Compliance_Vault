@@ -417,10 +417,40 @@ class TestAPIRoutes:
         from fastapi.testclient import TestClient
         from app.main import app
 
-        client = TestClient(app)
-        resp = client.get("/health")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["status"] == "healthy"
-        assert "governance_chain" in data
+        with TestClient(app) as client:
+            resp = client.get("/health")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["status"] == "healthy"
+            assert "governance_chain" in data
+
+    def test_login_page_renders_html(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+
+        with TestClient(app) as client:
+            resp = client.get("/login")
+            assert resp.status_code == 200
+            assert "ComplianceVault" in resp.text
+            assert "Sign In" in resp.text
+
+    def test_dashboard_and_document_detail_html(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+
+        with TestClient(app) as client:
+            # Login
+            login_resp = client.post("/api/login", json={"username": "danyal", "password": "admin123"})
+            assert login_resp.status_code == 200
+            client.cookies.set("session_token", login_resp.cookies.get("session_token"))
+
+            # View dashboard
+            dash_resp = client.get("/")
+            assert dash_resp.status_code == 200
+            assert "Processed Documents" in dash_resp.text
+
+            # View document detail
+            doc_resp = client.get("/document/TG-2026-10-A1B2")
+            assert doc_resp.status_code == 200
+            assert "Hash-Chained Audit Trail" in doc_resp.text
 

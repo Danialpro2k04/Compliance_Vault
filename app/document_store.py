@@ -611,3 +611,7 @@ def _build_sample_audit_chain(doc_id: str, risk_level: str) -> list[dict]:
         entries.append(entry)
 
     return entries
+
+
+# Auto-seed initial documents on module import
+seed_sample_documents()

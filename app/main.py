@@ -119,9 +119,9 @@ def dashboard_page(request: Request, session_token: Optional[str] = Cookie(None)
     stats = get_dashboard_stats()
 
     return templates.TemplateResponse(
-        "dashboard.html",
-        {
-            "request": request,
+        request=request,
+        name="dashboard.html",
+        context={
             "user": user,
             "documents": documents,
             "stats": stats,
@@ -132,7 +132,7 @@ def dashboard_page(request: Request, session_token: Optional[str] = Cookie(None)
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     """Login page."""
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="login.html")
 
 
 @app.get("/document/{document_id}", response_class=HTMLResponse)
@@ -161,9 +161,9 @@ def document_detail_page(
     can_verify = check_permission(session_token, "verify_integrity")
 
     return templates.TemplateResponse(
-        "document_detail.html",
-        {
-            "request": request,
+        request=request,
+        name="document_detail.html",
+        context={
             "user": user,
             "document": doc,
             "audit_log": audit_log,
