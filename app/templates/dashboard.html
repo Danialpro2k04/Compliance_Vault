@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComplianceVault — Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <h1>🛡️ ComplianceVault</h1>
+            <span class="nav-subtitle">Governance & Audit Dashboard</span>
+        </div>
+        <div class="nav-user">
+            <span class="user-info">
+                <span class="role-badge role-{{ user.role }}">{{ user.role | replace('_', ' ') | title }}</span>
+                {{ user.name }}
+            </span>
+            <button onclick="logout()" class="btn btn-sm btn-outline">Logout</button>
+        </div>
+    </nav>
+
+    <!-- Stats Overview -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.total_documents }}</div>
+            <div class="stat-label">Total Documents</div>
+        </div>
+        <div class="stat-card stat-green">
+            <div class="stat-value">{{ stats.approved_count }}</div>
+            <div class="stat-label">✅ Approved</div>
+        </div>
+        <div class="stat-card stat-red">
+            <div class="stat-value">{{ stats.blocked_count }}</div>
+            <div class="stat-label">🚫 Blocked</div>
+        </div>
+        <div class="stat-card stat-yellow">
+            <div class="stat-value">{{ stats.awaiting_review_count }}</div>
+            <div class="stat-label">⏳ Awaiting Review</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ stats.overridden_count }}</div>
+            <div class="stat-label">🔄 Overridden</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">
+                {% if stats.audit_chains_broken > 0 %}
+                    <span class="text-red">{{ stats.audit_chains_broken }} broken</span>
+                {% else %}
+                    <span class="text-green">{{ stats.audit_chains_verified }} valid</span>
+                {% endif %}
+            </div>
+            <div class="stat-label">🔗 Audit Chains</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+        <h2>Processed Documents</h2>
+        <div class="filters">
+            <select id="statusFilter" onchange="filterDocuments()">
+                <option value="">All Statuses</option>
+                <option value="approved">✅ Approved</option>
+                <option value="blocked">🚫 Blocked</option>
+                <option value="awaiting_review">⏳ Awaiting Review</option>
+                <option value="processing">⚙️ Processing</option>
+            </select>
+            <select id="riskFilter" onchange="filterDocuments()">
+                <option value="">All Risk Levels</option>
+                <option value="GREEN">🟢 GREEN</option>
+                <option value="YELLOW">🟡 YELLOW</option>
+                <option value="RED">🔴 RED</option>
+            </select>
+            <input type="date" id="dateFrom" onchange="filterDocuments()" placeholder="From Date">
+            <input type="date" id="dateTo" onchange="filterDocuments()" placeholder="To Date">
+        </div>
+    </div>
+
+    <!-- Documents Table -->
+    <div class="table-container">
+        <table class="documents-table" id="documentsTable">
+            <thead>
+                <tr>
+                    <th>Document ID</th>
+                    <th>Status</th>
+                    <th>Risk</th>
+                    <th>Shipper</th>
+                    <th>Consignee</th>
+                    <th>Route</th>
+                    <th>Sanctions</th>
+                    <th>HS Code</th>
+                    <th>Started</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in documents %}
+                <tr class="doc-row" data-status="{{ doc.pipeline_status }}" data-risk="{{ doc.overall_risk }}">
+                    <td>
+                        <a href="/document/{{ doc.document_id }}" class="doc-link">
+                            {{ doc.document_id }}
+                        </a>
+                        {% if doc.overrides %}
+                        <span class="override-badge" title="{{ doc.overrides | length }} override(s)">🔄</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="status-badge status-{{ doc.pipeline_status }}">
+                            {{ doc.pipeline_status | replace('_', ' ') | title }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="risk-indicator risk-{{ doc.overall_risk | lower }}">
+                            {{ doc.overall_risk }}
+                        </span>
+                    </td>
+                    <td>{{ doc.shipper_name or '—' }}</td>
+                    <td>{{ doc.consignee_name or '—' }}</td>
+                    <td>{{ doc.port_of_loading or '?' }} → {{ doc.port_of_discharge or '?' }}</td>
+                    <td>
+                        <span class="risk-indicator risk-{{ doc.sanctions_risk | lower }}">
+                            {{ doc.sanctions_risk }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if doc.hs_code %}
+                            {{ doc.hs_code }}
+                            <span class="confidence-badge">{{ (doc.hs_confidence * 100) | round(0) }}%</span>
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td>{{ doc.started_at[:10] if doc.started_at else '—' }}</td>
+                    <td>
+                        <a href="/document/{{ doc.document_id }}" class="btn btn-sm btn-outline">View</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if documents | length == 0 %}
+    <div class="empty-state">
+        <p>No documents found. Process some documents through the TradeGuard pipeline to see them here.</p>
+    </div>
+    {% endif %}
+
+    <!-- Risk Distribution -->
+    <div class="risk-distribution">
+        <h3>Risk Distribution</h3>
+        <div class="risk-bars">
+            <div class="risk-bar">
+                <div class="bar-label">GREEN</div>
+                <div class="bar-track">
+                    <div class="bar-fill bar-green" style="width: {{ (stats.green_count / stats.total_documents * 100) if stats.total_documents > 0 else 0 }}%"></div>
+                </div>
+                <div class="bar-count">{{ stats.green_count }}</div>
+            </div>
+            <div class="risk-bar">
+                <div class="bar-label">YELLOW</div>
+                <div class="bar-track">
+                    <div class="bar-fill bar-yellow" style="width: {{ (stats.yellow_count / stats.total_documents * 100) if stats.total_documents > 0 else 0 }}%"></div>
+                </div>
+                <div class="bar-count">{{ stats.yellow_count }}</div>
+            </div>
+            <div class="risk-bar">
+                <div class="bar-label">RED</div>
+                <div class="bar-track">
+                    <div class="bar-fill bar-red" style="width: {{ (stats.red_count / stats.total_documents * 100) if stats.total_documents > 0 else 0 }}%"></div>
+                </div>
+                <div class="bar-count">{{ stats.red_count }}</div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="dashboard-footer">
+        <p>ComplianceVault v1.0 | TradeGuard Week 6: Governance & Audit Layer</p>
+        <p>EU AI Act Article 50 Compliant | ISO/IEC 42001 Aligned</p>
+    </footer>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

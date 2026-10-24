@@ -1,0 +1,234 @@
+================================================================================
+TRADEGUARD — WEEK 6: COMPLIANCEVAULT (AUDIT TRAIL & GOVERNANCE DASHBOARD)
+================================================================================
+Developer: Danyal Wahdat (NUML Islamabad)
+Project: TradeGuard — Governed AI Agent System for Trade Compliance
+Milestone: Month 2, Week 6 (Governance & Audit Layer)
+Folder: /Users/danyalwahdat/tradeguard/compliance_vault
+Date: October 2026
+
+--------------------------------------------------------------------------------
+1. PROJECT OVERVIEW & CONTEXT
+--------------------------------------------------------------------------------
+TradeGuard is an autonomous, governed AI system for international trade compliance
+and freight documentation. Across Weeks 1 to 5, the core pipeline components were
+built:
+  • Week 1 & 2: Freight document extraction (Azure AI Document Intelligence) & cross-doc validation
+  • Week 3: Sanctions screening engine (SanctionScope) using Qdrant vector similarity & fuzzy matching
+  • Week 4: HS tariff classification agent (TariffAI) using RAG + Gemini LLM
+  • Week 5: TradeGuard Core Pipeline (LangGraph state machine connecting all engines with HITL)
+
+Week 6 addresses the fundamental governance challenge in regulated industries:
+"In trade compliance, the AI's answer isn't enough. You need to prove HOW it
+arrived at that answer, WHO reviewed it, and that NOBODY tampered with the record
+after the fact."
+
+ComplianceVault is the governance layer that wraps around TradeGuard Core,
+providing mathematical tamper-evidence, full traceability, role-based access control,
+authorized human overrides, and regulatory-ready PDF reporting.
+
+--------------------------------------------------------------------------------
+2. COMPLIANCE & REGULATORY STANDARDS IMPLEMENTED
+--------------------------------------------------------------------------------
+This project is engineered directly to meet international AI governance standards:
+
+1. EU AI ACT (REGULATION (EU) 2024/1689):
+   • Article 14 (Human Oversight): Implemented via "Compliance Officer Override"
+     and the human review flow. High-risk systems must allow human operators to
+     remain aware of AI capabilities, monitor operation, and override or reverse
+     the output. Written justifications are mandatory and recorded immutably.
+   • Article 50 (Transparency Obligations): Complete visibility into the AI's
+     reasoning chain (Document Intake -> Entity Extraction -> Sanctions Screening
+     -> HS Tariff Classification -> Risk Assessment -> Final Decision).
+
+2. ISO/IEC 42001 (AI MANAGEMENT SYSTEM):
+   • Section on Auditability & Traceability: Full hash-chained logs recording every
+     input, output, confidence score, timestamp, model verdict, and human interaction.
+
+--------------------------------------------------------------------------------
+3. CORE ARCHITECTURAL COMPONENTS BUILT
+--------------------------------------------------------------------------------
+
+1. HASH-CHAINED TAMPER-EVIDENT AUDIT STORE (`app/audit_store.py`):
+   • Cryptographic SHA-256 chain where:
+       Entry 0: Hash = SHA256("" + Entry_0_JSON)
+       Entry N: Hash = SHA256(Entry_{N-1}.Hash + Entry_N_JSON)
+   • If a single character, timestamp, or score in any past entry is modified,
+     every subsequent hash in the chain immediately breaks.
+   • Supports dual-level verification:
+       - Document-level audit chain (per-shipment decisions)
+       - System governance log (tracking logins, exports, overrides, and verifications)
+   • JSONL append-only persistence to prevent accidental or malicious overwriting.
+
+2. ROLE-BASED ACCESS CONTROL (RBAC) (`app/rbac.py` & `app/config.py`):
+   • Operator:
+       - Permissions: view_documents, submit_documents, view_own_reports
+       - Intended for logistics clerks & freight forwarding staff
+   • Compliance Officer:
+       - Permissions: view_all_reports, review_flagged, export_reports
+       - Intended for certified compliance officers reviewing YELLOW shipments
+   • Administrator:
+       - Permissions: override_decision, manage_users, view_audit_chain, verify_integrity
+       - Intended for system administrators and compliance heads
+
+3. COMPLIANCE OFFICER OVERRIDE (`app/document_store.py`):
+   • Allows authorized administrators to overturn an AI decision (e.g., clearing a
+     false-positive sanctions match or rejecting an ambiguous HS tariff code).
+   • Mandatory justification requirement (minimum 20 characters).
+   • The override is treated as a first-class event:
+       - Appended and hash-chained into the document's audit log
+       - Logged into the central governance audit log
+       - Rendered with full historical comparison (previous vs new decision)
+
+4. INTERACTIVE WEB DASHBOARD (`app/main.py`, `app/templates/`, `app/static/`):
+   • Responsive UI built with FastAPI + Jinja2 + CSS3 + Vanilla JavaScript:
+       - Statistics cards: Total processed, Approved, Blocked, Awaiting Review, Overridden
+       - Real-time audit chain integrity indicators (valid / broken counter)
+       - Risk distribution chart (GREEN / YELLOW / RED)
+       - Searchable and filterable table (by status, risk level, date range)
+       - Full document drill-down page showing party details, routing, sanctions matches,
+         HS reasoning tree (Chapter -> Heading -> Subheading), and audit trail.
+
+5. REGULATORY PDF REPORT EXPORTER (`app/pdf_exporter.py`):
+   • Built using `fpdf2` with TradeGuard enterprise branding.
+   • Generates multi-page compliance reports featuring:
+       1. Document Summary & Risk Level
+       2. Trade Parties & Route
+       3. Sanctions Screening Detail (matched names, sources, match scores)
+       4. HS Tariff Classification & Reasoning Chain
+       5. Document Discrepancies & Flagged Risk Factors
+       6. Human Review & Override History
+       7. Complete Hash-Chained Audit Trail with SHA-256 hashes
+       8. Legal regulatory declaration and export metadata timestamp
+
+--------------------------------------------------------------------------------
+4. DIRECTORY STRUCTURE
+--------------------------------------------------------------------------------
+compliance_vault/
+├── app/
+│   ├── __init__.py
+│   ├── main.py              # FastAPI app, HTML rendering, REST API endpoints
+│   ├── config.py             # RBAC role definitions, thresholds, service URLs
+│   ├── schemas.py            # Pydantic schemas for requests, responses, models
+│   ├── rbac.py               # Authentication, session store, permission checking
+│   ├── audit_store.py        # Append-only hash-chained storage & chain validation
+│   ├── document_store.py     # Document state caching, overrides, filtering, stats
+│   ├── pdf_exporter.py       # Regulatory PDF report generator
+│   ├── templates/
+│   │   ├── login.html        # Authentication UI with demo credential table
+│   │   ├── dashboard.html    # Main compliance monitoring dashboard
+│   │   └── document_detail.html # Inspection, audit chain view, and override form
+│   └── static/
+│       ├── css/style.css     # Clean enterprise dashboard styling
+│       └── js/dashboard.js   # Dynamic client-side filtering and keyboard shortcuts
+├── tests/
+│   ├── __init__.py
+│   └── test_compliance_vault.py # Comprehensive test suite (26 tests, 100% passing)
+├── data/                     # Generated at runtime (gitignored)
+│   ├── governance_audit.jsonl# Central governance audit log
+│   └── reports/              # Generated PDF reports
+├── requirements.txt
+├── .env
+├── .env.example
+├── .gitignore
+├── README.md
+└── WEEK_6_PROJECT_DESCRIPTION.txt
+
+--------------------------------------------------------------------------------
+5. API ENDPOINTS REFERENCE
+--------------------------------------------------------------------------------
+Page Routes (HTML):
+  • GET  /                       Main Dashboard (requires login session)
+  • GET  /login                  Login Page
+  • GET  /document/{doc_id}      Document Detail & Audit Trail Page
+
+Core API:
+  • POST /api/login              Authenticate user and create session cookie
+  • POST /api/logout             Terminate session and log governance event
+  • GET  /api/documents          List documents (supports status, risk, date filters)
+  • GET  /api/documents/{doc_id} Retrieve full document state + audit chain
+  • POST /api/override/{doc_id}  Execute Compliance Officer Override (Admin only)
+  • GET  /api/verify/{doc_id}    Validate document audit chain integrity
+  • GET  /api/verify/governance  Validate governance log chain integrity
+  • GET  /api/export/{doc_id}    Generate and download PDF compliance report
+  • GET  /api/stats              Aggregate dashboard statistics
+  • GET  /api/governance-log     Central system audit log (Admin only)
+  • GET  /api/users              List system users and role permissions
+  • GET  /health                 Health check endpoint with chain verification
+
+--------------------------------------------------------------------------------
+6. TEST SUITE & VERIFICATION RESULTS
+--------------------------------------------------------------------------------
+Automated test suite located in `tests/test_compliance_vault.py`:
+  • 26 test cases testing:
+      1. Audit log appending and hash generation
+      2. Cryptographic hash-chain integrity verification
+      3. Tamper detection (mutating past entries breaks verification)
+      4. RBAC authentication, session lifecycle, and permission enforcement
+      5. Document storage, filtering, querying, and stats compilation
+      6. Compliance Officer Override logic and state transitions
+      7. Multi-override chaining and historical immutability
+      8. PDF generation across all risk states (GREEN, YELLOW, RED)
+      9. FastAPI health and API endpoints
+
+Test Results:
+  ======================== 26 passed in 1.06s ========================
+
+--------------------------------------------------------------------------------
+7. HOW TO RUN THE PROJECT
+--------------------------------------------------------------------------------
+1. Activate virtual environment:
+   cd /Users/danyalwahdat/tradeguard/compliance_vault
+   source venv/bin/activate
+
+2. Run tests:
+   pytest tests/ -v
+
+3. Launch dashboard:
+   uvicorn app.main:app --host 0.0.0.0 --port 8006 --reload
+
+4. Open in browser:
+   http://localhost:8006
+
+5. Demo Credentials:
+   • Admin:      username: danyal   | password: admin123
+   • Officer:    username: sarah    | password: officer123
+   • Operator:   username: ali      | password: operator123
+
+--------------------------------------------------------------------------------
+8. LINKEDIN POST DRAFT (WEEK 6)
+--------------------------------------------------------------------------------
+In trade compliance, an AI model's output is practically worthless without proof.
+
+If an AI flags or clears an international cargo container, customs authorities
+and banks don't just ask "what was the decision?"
+They demand:
+1. HOW did the system arrive at that conclusion?
+2. WHO reviewed and authorized the decision?
+3. Can you prove NOBODY modified the records after the fact?
+
+Week 6 of building TradeGuard: Built ComplianceVault — the governance and audit
+layer that turns autonomous agent workflows into legally defensible compliance systems.
+
+Here is what we shipped this weekend:
+
+🔒 Tamper-Evident Hash Chains: Every AI action, document intake, sanctions check,
+and tariff classification is recorded in an append-only ledger using SHA-256 hash
+chaining. If anyone tampers with a single timestamp or confidence score in the past,
+every subsequent block in the chain invalidates immediately.
+
+👤 Role-Based Access Control (RBAC): Dedicated privilege boundaries separating
+Logistics Operators, Compliance Officers, and Administrators.
+
+⚡ Compliance Officer Override (EU AI Act Article 14): Human oversight isn't a
+checkbox. Authorized compliance heads can override AI decisions, but it requires
+mandatory written legal justification that is permanently chained into the immutable log.
+
+📄 Regulatory PDF Exporter: Full audit trail dossiers generated in seconds for
+customs and regulatory submission (EU AI Act Article 50 & ISO/IEC 42001 aligned).
+
+AI in high-stakes enterprise isn't about replacing humans — it's about governed,
+auditable, and verifiable collaboration between AI agents and certified officers.
+
+#TradeCompliance #LangGraph #FastAPI #AIGovernance #EUAIAct #ISO42001 #Python #BuildInPublic
+================================================================================

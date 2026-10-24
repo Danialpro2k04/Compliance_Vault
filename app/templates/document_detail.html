@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComplianceVault — {{ document.document_id }}</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <a href="/" class="nav-back">← Dashboard</a>
+            <h1>🛡️ {{ document.document_id }}</h1>
+        </div>
+        <div class="nav-user">
+            <span class="user-info">
+                <span class="role-badge role-{{ user.role }}">{{ user.role | replace('_', ' ') | title }}</span>
+                {{ user.name }}
+            </span>
+            <button onclick="logout()" class="btn btn-sm btn-outline">Logout</button>
+        </div>
+    </nav>
+
+    <!-- Document Header -->
+    <div class="doc-header">
+        <div class="doc-header-main">
+            <span class="status-badge status-{{ document.pipeline_status }} large">
+                {{ document.pipeline_status | replace('_', ' ') | title }}
+            </span>
+            <span class="risk-indicator risk-{{ document.overall_risk | lower }} large">
+                {{ document.overall_risk }}
+            </span>
+        </div>
+        <div class="doc-header-actions">
+            {% if can_verify %}
+            <button onclick="verifyChain('{{ document.document_id }}')" class="btn btn-sm btn-outline">
+                🔗 Verify Chain
+            </button>
+            {% endif %}
+            {% if can_export %}
+            <a href="/api/export/{{ document.document_id }}" class="btn btn-sm btn-outline">
+                📄 Export PDF
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Chain Integrity Banner -->
+    <div class="chain-banner {% if chain_valid %}chain-valid{% else %}chain-broken{% endif %}">
+        {% if chain_valid %}
+            🔗 Audit chain verified: {{ chain_msg }}
+        {% else %}
+            ⚠️ AUDIT CHAIN INTEGRITY WARNING: {{ chain_msg }}
+        {% endif %}
+    </div>
+
+    <!-- Two Column Layout -->
+    <div class="detail-grid">
+        <!-- Left Column: Trade Details -->
+        <div class="detail-section">
+            <h3>📦 Trade Details</h3>
+            <div class="detail-fields">
+                <div class="field">
+                    <span class="field-label">Shipper</span>
+                    <span class="field-value">{{ document.shipper_name or 'N/A' }}</span>
+                </div>
+                <div class="field">
+                    <span class="field-label">Consignee</span>
+                    <span class="field-value">{{ document.consignee_name or 'N/A' }}</span>
+                </div>
+                <div class="field">
+                    <span class="field-label">Port of Loading</span>
+                    <span class="field-value">{{ document.port_of_loading or 'N/A' }}</span>
+                </div>
+                <div class="field">
+                    <span class="field-label">Port of Discharge</span>
+                    <span class="field-value">{{ document.port_of_discharge or 'N/A' }}</span>
+                </div>
+                <div class="field full-width">
+                    <span class="field-label">Cargo Description</span>
+                    <span class="field-value">{{ document.cargo_description or 'N/A' }}</span>
+                </div>
+                <div class="field">
+                    <span class="field-label">Submitted By</span>
+                    <span class="field-value">{{ document.submitted_by or 'N/A' }}</span>
+                </div>
+                <div class="field">
+                    <span class="field-label">Started At</span>
+                    <span class="field-value">{{ document.started_at[:19] if document.started_at else 'N/A' }}</span>
+                </div>
+                <div class="field">
+                    <span class="field-label">Completed At</span>
+                    <span class="field-value">{{ document.completed_at[:19] if document.completed_at else 'In Progress' }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Compliance Results -->
+        <div class="detail-section">
+            <h3>🔍 Compliance Results</h3>
+
+            <!-- Sanctions -->
+            <div class="compliance-card">
+                <h4>Sanctions Screening</h4>
+                <span class="risk-indicator risk-{{ document.sanctions_risk | lower }}">
+                    {{ document.sanctions_risk }}
+                </span>
+
+                {% set shipper_s = document.shipper_screening %}
+                {% set consignee_s = document.consignee_screening %}
+
+                <div class="screening-detail">
+                    <div class="screening-party">
+                        <strong>Shipper:</strong>
+                        <span class="risk-indicator risk-{{ shipper_s.risk_level | lower }} small">
+                            {{ shipper_s.risk_level }}
+                        </span>
+                        {% if shipper_s.matches %}
+                        <div class="matches">
+                            {% for m in shipper_s.matches %}
+                            <div class="match-entry">
+                                → {{ m.matched_name }} (score: {{ m.combined_score }}, {{ m.source }})
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <span class="text-muted">No matches</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="screening-party">
+                        <strong>Consignee:</strong>
+                        <span class="risk-indicator risk-{{ consignee_s.risk_level | lower }} small">
+                            {{ consignee_s.risk_level }}
+                        </span>
+                        {% if consignee_s.matches %}
+                        <div class="matches">
+                            {% for m in consignee_s.matches %}
+                            <div class="match-entry">
+                                → {{ m.matched_name }} (score: {{ m.combined_score }}, {{ m.source }})
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <span class="text-muted">No matches</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- HS Classification -->
+            <div class="compliance-card">
+                <h4>HS Tariff Classification</h4>
+                {% if document.hs_code %}
+                    <div class="hs-code-display">{{ document.hs_code }}</div>
+                    <div class="confidence-display">
+                        Confidence: {{ (document.hs_confidence * 100) | round(1) }}%
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" style="width: {{ document.hs_confidence * 100 }}%"></div>
+                        </div>
+                    </div>
+                    {% set hs_result = document.hs_classification.get('result', {}) if document.hs_classification is mapping else {} %}
+                    {% if hs_result %}
+                    <div class="hs-reasoning">
+                        <small>{{ hs_result.get('primary_description', '') }}</small>
+                        {% set reasoning = hs_result.get('reasoning', {}) %}
+                        {% if reasoning %}
+                        <ul class="reasoning-chain">
+                            {% if reasoning.get('chapter') %}<li>{{ reasoning.chapter }}</li>{% endif %}
+                            {% if reasoning.get('heading') %}<li>{{ reasoning.heading }}</li>{% endif %}
+                            {% if reasoning.get('subheading') %}<li>{{ reasoning.subheading }}</li>{% endif %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                {% else %}
+                    <span class="text-muted">
+                        {% if document.hs_classification is mapping and document.hs_classification.get('skipped') %}
+                            Skipped: {{ document.hs_classification.get('reason', 'Unknown') }}
+                        {% else %}
+                            Not classified
+                        {% endif %}
+                    </span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Risk Factors -->
+    {% if document.risk_factors %}
+    <div class="detail-section full-width">
+        <h3>⚠️ Risk Factors</h3>
+        <ul class="risk-factors-list">
+            {% for factor in document.risk_factors %}
+            <li class="risk-factor-item">{{ factor }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Decision & Review -->
+    <div class="detail-section full-width">
+        <h3>📋 Decision & Human Review</h3>
+        <div class="decision-card">
+            <div class="decision-row">
+                <span class="field-label">Decision:</span>
+                <span class="field-value">
+                    {% if document.human_decision %}
+                        <span class="decision-badge decision-{{ document.human_decision }}">
+                            {{ document.human_decision | upper }}
+                        </span>
+                    {% else %}
+                        <span class="text-muted">Pending</span>
+                    {% endif %}
+                </span>
+            </div>
+            <div class="decision-row">
+                <span class="field-label">Reviewed By:</span>
+                <span class="field-value">{{ document.reviewed_by or 'Pending' }}</span>
+            </div>
+            <div class="decision-row">
+                <span class="field-label">Justification:</span>
+                <span class="field-value">{{ document.human_justification or 'N/A' }}</span>
+            </div>
+        </div>
+
+        <!-- Override History -->
+        {% if document.overrides %}
+        <div class="override-history">
+            <h4>🔄 Override History ({{ document.overrides | length }} override{{ 's' if document.overrides | length > 1 else '' }})</h4>
+            {% for ov in document.overrides %}
+            <div class="override-entry">
+                <div class="override-header">
+                    <span class="override-badge">Override #{{ loop.index }}</span>
+                    <span class="override-time">{{ ov.timestamp[:19] }}</span>
+                </div>
+                <div class="override-details">
+                    <p><strong>{{ ov.officer_name }}</strong> ({{ ov.officer_role }}) changed decision from
+                    <span class="status-badge status-{{ ov.previous_status }} small">{{ ov.previous_status }}</span>
+                    to
+                    <span class="decision-badge decision-{{ ov.new_decision }}">{{ ov.new_decision | upper }}</span>
+                    </p>
+                    <p class="override-justification">
+                        <strong>Justification:</strong> {{ ov.justification }}
+                    </p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Override Form (Admin only) -->
+        {% if can_override %}
+        <div class="override-form-container">
+            <h4>⚡ Compliance Officer Override</h4>
+            <p class="override-warning">
+                ⚠️ Overrides are immutably logged in the audit trail per EU AI Act Article 14.
+                A mandatory written justification is required.
+            </p>
+            <form id="overrideForm" class="override-form">
+                <div class="form-group">
+                    <label for="overrideDecision">New Decision</label>
+                    <select id="overrideDecision" required>
+                        <option value="">Select decision...</option>
+                        <option value="approve">Approve</option>
+                        <option value="reject">Reject / Block</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="overrideJustification">Written Justification (min 20 chars)</label>
+                    <textarea id="overrideJustification" rows="3" minlength="20" required
+                        placeholder="Provide detailed justification for this override..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="officerName">Officer Name</label>
+                    <input type="text" id="officerName" value="{{ user.name }}" required>
+                </div>
+                <button type="submit" class="btn btn-warning">Submit Override</button>
+            </form>
+            <div id="overrideResult" style="display: none;"></div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Audit Trail -->
+    <div class="detail-section full-width">
+        <h3>🔗 Hash-Chained Audit Trail ({{ audit_log | length }} entries)</h3>
+        <div class="audit-trail">
+            {% for entry in audit_log %}
+            <div class="audit-entry {% if entry.node == 'compliance_officer_override' %}audit-override{% endif %}">
+                <div class="audit-header">
+                    <span class="audit-index">#{{ loop.index0 }}</span>
+                    <span class="audit-node">{{ entry.node }}</span>
+                    {% if entry.risk_level %}
+                    <span class="risk-indicator risk-{{ entry.risk_level | lower }} small">
+                        {{ entry.risk_level }}
+                    </span>
+                    {% endif %}
+                    {% if entry.confidence is defined and entry.confidence is not none %}
+                    <span class="confidence-badge small">{{ (entry.confidence * 100) | round(0) }}%</span>
+                    {% endif %}
+                    <span class="audit-time">{{ entry.timestamp[:19] }}</span>
+                </div>
+                <div class="audit-action">{{ entry.action }}</div>
+                <div class="audit-details">
+                    <div class="audit-io">
+                        <span class="io-label">Input:</span>
+                        <code>{{ entry.input }}</code>
+                    </div>
+                    <div class="audit-io">
+                        <span class="io-label">Output:</span>
+                        <code>{{ entry.output }}</code>
+                    </div>
+                </div>
+                <div class="audit-hash">
+                    <span class="hash-label">SHA-256:</span>
+                    <code class="hash-value">{{ entry.hash[:16] }}...{{ entry.hash[-16:] }}</code>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <footer class="dashboard-footer">
+        <p>ComplianceVault v1.0 | TradeGuard Week 6: Governance & Audit Layer</p>
+        <p>EU AI Act Article 50 Compliant | ISO/IEC 42001 Aligned</p>
+    </footer>
+
+    <script src="/static/js/dashboard.js"></script>
+    <script>
+        // Override form handler
+        const overrideForm = document.getElementById('overrideForm');
+        if (overrideForm) {
+            overrideForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const decision = document.getElementById('overrideDecision').value;
+                const justification = document.getElementById('overrideJustification').value;
+                const officerName = document.getElementById('officerName').value;
+                const resultDiv = document.getElementById('overrideResult');
+
+                if (justification.length < 20) {
+                    resultDiv.innerHTML = '<p class="error-msg">Justification must be at least 20 characters.</p>';
+                    resultDiv.style.display = 'block';
+                    return;
+                }
+
+                if (!confirm(`Are you sure you want to override this decision to "${decision}"? This action is immutably logged.`)) {
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/override/{{ document.document_id }}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            new_decision: decision,
+                            justification: justification,
+                            officer_name: officerName,
+                        }),
+                    });
+
+                    const data = await response.json();
+                    if (response.ok) {
+                        resultDiv.innerHTML = '<p class="success-msg">Override recorded successfully. Reloading...</p>';
+                        resultDiv.style.display = 'block';
+                        setTimeout(() => window.location.reload(), 1500);
+                    } else {
+                        resultDiv.innerHTML = `<p class="error-msg">${data.detail || 'Override failed'}</p>`;
+                        resultDiv.style.display = 'block';
+                    }
+                } catch (err) {
+                    resultDiv.innerHTML = '<p class="error-msg">Connection error</p>';
+                    resultDiv.style.display = 'block';
+                }
+            });
+        }
+
+        async function verifyChain(docId) {
+            try {
+                const response = await fetch(`/api/verify/${docId}`);
+                const data = await response.json();
+                alert(`Chain Verification:\n\n${data.is_valid ? '✅ VALID' : '❌ BROKEN'}\n${data.message}\n\nVerified by: ${data.verified_by}\nAt: ${data.verified_at}`);
+            } catch (err) {
+                alert('Error verifying chain');
+            }
+        }
+    </script>
+</body>
+</html>
